@@ -1,32 +1,42 @@
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from google.adk.agents import Agent
 from google.adk.sessions import InMemorySessionService
+from toolbox_core import ToolboxSyncClient
 
-# Configure short-term session to use the in-memory service.
-# The agent only needs to remember the current conversation,
-# not previous ones, so in-memory storage is enough.
+from .datastore import search_store_documents
+from .search_agent import search_tool
+
+load_dotenv()
+
+# Configure session service
 session_service = InMemorySessionService()
 
-# Read the instructions from a file in the same
-# directory as this agent.py file.
-script_dir = os.path.dirname(os.path.abspath(__file__))
-instruction_file_path = os.path.join(script_dir, "agent-prompt.txt")
-with open(instruction_file_path, "r") as f:
-    instruction = f.read()
+# Read agent instructions
+script_dir = Path(__file__).parent
+instruction = (script_dir / "agent-prompt.txt").read_text()
 
-# Set up the tools that we will be using for the root agent
-# (database, datastore search and web search tools get added later)
-tools = []
+# Connect to Google Gen AI Toolbox
+toolbox_url = os.getenv("TOOLBOX_URL", "http://127.0.0.1:5000")
+toolbox = ToolboxSyncClient(toolbox_url)
 
-# Create our agent.
-# Model choice: gemini-2.5-flash gives reliable tool calling with low
-# latency and cost, which suits a customer-facing chat agent.
-# (Update this comment after comparing 2.5-pro, 2.5-flash, 2.5-flash-lite.)
+# Load MySQL product price tool
+get_product_price = toolbox.load_tool("get-product-price")
+
+# Configure tools
+tools = [
+    get_product_price,
+    search_store_documents,
+    search_tool,
+]
+
+# Create root agent
 root_agent = Agent(
     name="bettys_bird_boutique_agent",
-    model="gemini-2.5-flash",
-    description="Customer service agent for Betty's Bird Boutique, answering questions about the store, its products and birds.",
+    model="gemini-3.8-flash",
+    description="Customer service agent for Betty's Bird Boutique.",
     instruction=instruction,
     tools=tools,
 )
